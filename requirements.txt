@@ -1,4 +1,16 @@
+# Web framework
 flask>=2.0.0
-numpy>=1.24.0
+
+# Computer vision
 opencv-python>=4.7.0
 ultralytics>=8.0.0
+
+# Numerical processing
+numpy>=1.24.0
+
+# Deep learning
+torch>=1.13.0
+torchvision>=0.14.0
+
+# Utils
+python-dotenv>=0.21.0

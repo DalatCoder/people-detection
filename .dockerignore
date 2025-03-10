@@ -1,0 +1,55 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Logs
+logs/
+*.log
+
+# Environment
+.env
+.venv
+venv/
+ENV/
+
+# Docker
+.dockerignore
+Dockerfile
+Dockerfile.*
+docker-compose*
+
+# Editor configs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Documentation
+README.md
+documentation.md
+
+# Models (will be downloaded in container)
+models/*.pt

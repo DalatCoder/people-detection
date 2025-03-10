@@ -1,0 +1,3 @@
+"""
+People Counter application package.
+"""
