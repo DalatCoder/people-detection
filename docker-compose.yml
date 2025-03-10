@@ -1,0 +1,44 @@
+version: "3"
+
+services:
+  people-counter:
+    build: .
+    ports:
+      - "8888:8888"
+    restart: unless-stopped
+    volumes:
+      - ./config.py:/app/config.py:ro
+      - ./models:/app/models
+    environment:
+      - CAMERA_URL=${CAMERA_URL:-rtsp://user:pass@camera-ip:554/stream}
+      - FLASK_PORT=8888
+      - CONFIDENCE_THRESHOLD=${CONFIDENCE_THRESHOLD:-0.25}
+    # For CPU-only usage (default)
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4G
+
+  # Uncomment the following service configuration for GPU support
+  # people-counter-gpu:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.gpu
+  #   ports:
+  #     - "8888:8888"
+  #   restart: unless-stopped
+  #   volumes:
+  #     - ./config.py:/app/config.py:ro
+  #     - ./models:/app/models
+  #   environment:
+  #     - CAMERA_URL=${CAMERA_URL:-rtsp://user:pass@camera-ip:554/stream}
+  #     - FLASK_PORT=8888
+  #     - CONFIDENCE_THRESHOLD=${CONFIDENCE_THRESHOLD:-0.25}
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]

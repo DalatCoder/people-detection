@@ -70,6 +70,73 @@ python app.py
 
 Access the web interface at: http://localhost:8888
 
+## Docker Deployment
+
+This application can be containerized for production deployment using Docker.
+
+### Prerequisites
+
+- Docker
+- Docker Compose
+- NVIDIA Container Toolkit (for GPU support)
+
+### CPU-only Deployment
+
+1. Configure your environment variables:
+
+   ```bash
+   cp .env.example .env
+   # Edit .env with your camera URL and other settings
+   ```
+
+2. Build and start the container:
+
+   ```bash
+   docker-compose up -d
+   ```
+
+3. Access the web interface at: http://localhost:8888
+
+### GPU-enabled Deployment
+
+For GPU acceleration:
+
+1. Configure your environment as above.
+
+2. Ensure the NVIDIA Container Toolkit is installed:
+
+   ```bash
+   # On Ubuntu
+   distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+   curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add -
+   curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | sudo tee /etc/apt/sources.list.d/nvidia-docker.list
+   sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
+   sudo systemctl restart docker
+   ```
+
+3. Build and start the GPU container:
+
+   ```bash
+   docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+   ```
+
+### Scaling and Production Considerations
+
+- **Reverse Proxy**: For production, place behind Nginx or Traefik for SSL termination and security
+- **Authentication**: Add authentication for the web interface
+- **Logging**: Configure proper logging with volume mounts for persistence
+- **Health Checks**: Implement health monitoring for the container
+
+### Updating the Application
+
+To update the application with new code:
+
+```bash
+git pull
+docker-compose build
+docker-compose up -d
+```
+
 ## Architecture
 
 The system is built with the following components:
