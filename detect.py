@@ -33,6 +33,9 @@ def run_detection(use_cpu=False, display=True):
     fps = 0
     frames_processed = 0
     
+    # Track person count
+    max_people_count = 0
+    
     try:
         while True:
             success, frame = stream.read()
@@ -53,20 +56,30 @@ def run_detection(use_cpu=False, display=True):
             results = model(frame, conf=MODEL_CONFIG['conf_threshold'], device=device)
             frames_processed += 1
             
+            # Count people in the frame (class 0 is 'person' in COCO dataset)
+            people_count = sum(1 for box in results[0].boxes if box.cls == 0)
+            
+            # Update maximum people count
+            max_people_count = max(max_people_count, people_count)
+            
             # Log performance metrics every 100 frames
             if frames_processed % 100 == 0:
-                print(f"Processed {frames_processed} frames. Current FPS: {fps:.2f}")
+                print(f"Processed {frames_processed} frames. Current FPS: {fps:.2f}, People: {people_count}")
             
             # Visualize the results on the frame
             annotated_frame = results[0].plot()
             
-            # Add FPS info
+            # Add FPS and people count info
             cv2.putText(annotated_frame, f"FPS: {fps:.2f}", (10, 30), 
                         cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            cv2.putText(annotated_frame, f"People: {people_count}", (10, 70), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+            cv2.putText(annotated_frame, f"Max People: {max_people_count}", (10, 110), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
             
             if display:
                 # Display the annotated frame
-                cv2.imshow("YOLOv8 Detection", annotated_frame)
+                cv2.imshow("People Counter", annotated_frame)
                 
                 # Break the loop if 'q' is pressed
                 if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -78,9 +91,10 @@ def run_detection(use_cpu=False, display=True):
         if display:
             cv2.destroyAllWindows()
         print(f"Processed {frames_processed} frames in total.")
+        print(f"Maximum number of people detected: {max_people_count}")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run object detection on camera stream")
+    parser = argparse.ArgumentParser(description="Run people counting on camera stream")
     parser.add_argument('--cpu', action='store_true', help='Force CPU usage even if GPU is available')
     parser.add_argument('--no-display', action='store_true', help='Run without display (headless mode)')
     args = parser.parse_args()
