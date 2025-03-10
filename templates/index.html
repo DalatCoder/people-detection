@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>People Counter</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+        text-align: center;
+      }
+      .container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      .video-container {
+        margin-bottom: 20px;
+        position: relative;
+      }
+      .stats {
+        background-color: #f4f4f4;
+        border-radius: 5px;
+        padding: 20px;
+        margin-bottom: 20px;
+        width: 80%;
+        display: flex;
+        justify-content: space-around;
+      }
+      .stat-box {
+        text-align: center;
+      }
+      .stat-value {
+        font-size: 24px;
+        font-weight: bold;
+        color: #0066cc;
+      }
+      .stat-label {
+        font-size: 14px;
+        color: #666;
+      }
+      img {
+        max-width: 100%;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+      h1 {
+        color: #333;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Real-time People Counter</h1>
+
+      <div class="stats">
+        <div class="stat-box">
+          <div class="stat-value" id="current-count">0</div>
+          <div class="stat-label">Current Count</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" id="max-count">0</div>
+          <div class="stat-label">Maximum Count</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" id="fps">0</div>
+          <div class="stat-label">FPS</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" id="frames">0</div>
+          <div class="stat-label">Frames Processed</div>
+        </div>
+      </div>
+
+      <div class="video-container">
+        <img src="{{ url_for('video_feed') }}" alt="Video stream" />
+      </div>
+    </div>
+
+    <script>
+      // Fetch stats every second and update the UI
+      setInterval(function () {
+        fetch("/stats")
+          .then((response) => response.json())
+          .then((data) => {
+            document.getElementById("current-count").textContent =
+              data.people_count;
+            document.getElementById("max-count").textContent =
+              data.max_people_count;
+            document.getElementById("fps").textContent = data.fps.toFixed(1);
+            document.getElementById("frames").textContent =
+              data.frames_processed;
+          })
+          .catch((error) => console.error("Error fetching stats:", error));
+      }, 1000);
+    </script>
+  </body>
+</html>
