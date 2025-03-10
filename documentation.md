@@ -153,6 +153,215 @@ The camera handling is abstracted in the `camera_utils.py` file, providing funct
 4. **Timeouts**: Implement read timeouts to prevent blocking on failed connections
 5. **Reconnection Strategy**: Use exponential backoff for reconnection attempts
 
+### Camera Connection Protocols
+
+#### RTSP Protocol
+
+**Real Time Streaming Protocol (RTSP)** is the most common protocol used for IP cameras and offers several advantages:
+
+1. **Overview**:
+
+   - A network control protocol designed for use in entertainment and communications systems
+   - Operates on port 554 by default
+   - Establishes and controls media sessions between endpoints
+
+2. **How RTSP Works**:
+
+   - Control mechanism: Client sends commands (DESCRIBE, SETUP, PLAY, PAUSE, TEARDOWN)
+   - Transport protocol: Usually RTP (Real-time Transport Protocol) over UDP or TCP
+   - Session management: Maintains session state between client and server
+
+3. **RTSP URL Structure**:
+
+   ```
+   rtsp://[username:password@]ip_address[:port]/stream_path
+   ```
+
+   Example:
+
+   ```
+   rtsp://admin:password123@192.168.1.100:554/stream1
+   ```
+
+4. **Implementation in Our System**:
+
+   ```python
+   def create_rtsp_capture(ip, username=None, password=None, port=554, path="stream1"):
+       auth = f"{username}:{password}@" if username and password else ""
+       url = f"rtsp://{auth}{ip}:{port}/{path}"
+
+       # OpenCV RTSP optimization
+       stream = cv2.VideoCapture(url)
+       stream.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Minimize latency
+
+       # Use TCP instead of UDP (more reliable but slightly higher latency)
+       stream.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'H264'))
+       stream.set(cv2.CAP_PROP_RTSP_TRANSPORT, 'tcp')  # Use 'udp' for lower latency
+
+       return stream
+   ```
+
+5. **Advantages**:
+
+   - Widespread support among IP cameras
+   - Low latency streaming
+   - Bidirectional control (can send commands to camera)
+   - Efficient bandwidth usage
+
+6. **Disadvantages**:
+   - May be blocked by firewalls
+   - Authentication methods can be limited
+   - Requires specific port openings in network infrastructure
+
+#### MJPEG Protocol
+
+**Motion JPEG (MJPEG)** is another common protocol, especially for web-based camera viewing:
+
+1. **Overview**:
+
+   - Consists of a sequence of individual JPEG images
+   - Each frame is compressed separately as a JPEG image
+   - Typically delivered over HTTP
+
+2. **Implementation**:
+
+   ```python
+   def create_mjpeg_capture(url):
+       stream = cv2.VideoCapture(url)
+       return stream
+   ```
+
+   Example URL:
+
+   ```
+   http://192.168.1.100/video.mjpg
+   ```
+
+3. **Advantages**:
+
+   - Works through most firewalls (uses HTTP, typically port 80)
+   - Simple implementation
+   - Better frame-by-frame quality than H.264 at similar bitrates
+
+4. **Disadvantages**:
+   - Higher bandwidth usage than H.264/H.265
+   - Higher latency than RTSP
+   - No standardized control protocol
+
+#### HTTP/HTTPS Streams
+
+Many modern cameras support direct HTTP or HTTPS streaming:
+
+1. **Overview**:
+
+   - Camera provides video stream via web server
+   - Can use various formats (MJPEG, HLS, DASH)
+   - Usually requires specific URL paths
+
+2. **HLS (HTTP Live Streaming)**:
+
+   - Developed by Apple
+   - Uses .m3u8 playlist files and .ts transport stream segments
+   - Example URL: `https://192.168.1.100/stream/playlist.m3u8`
+
+3. **DASH (Dynamic Adaptive Streaming over HTTP)**:
+
+   - Open standard
+   - Uses MPD (Media Presentation Description) and segments
+   - Adaptive bitrate streaming
+
+4. **Advantages**:
+
+   - Works through firewalls
+   - Supports standard HTTP authentication
+   - Can use SSL/TLS encryption
+
+5. **Disadvantages**:
+   - Higher latency (typically 5-30 seconds)
+   - More complex to implement adaptive streaming
+
+#### USB/DirectShow Cameras
+
+Local cameras connected directly to the system:
+
+1. **Implementation in OpenCV**:
+
+   ```python
+   def create_local_camera_capture(camera_index=0):
+       # camera_index: 0 for default webcam, 1+ for additional cameras
+       stream = cv2.VideoCapture(camera_index)
+
+       # Set resolution and frame rate
+       stream.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+       stream.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+       stream.set(cv2.CAP_PROP_FPS, 30)
+
+       return stream
+   ```
+
+2. **Advantages**:
+
+   - Lowest latency option
+   - No network configuration required
+   - Higher reliability than network cameras
+
+3. **Disadvantages**:
+   - Limited by physical USB connections
+   - Cable length limitations
+   - May require device-specific drivers
+
+### Protocol Selection Guide
+
+| Protocol | Latency | Firewall Friendly | Bandwidth Usage | Setup Complexity | Best For                                     |
+| -------- | ------- | ----------------- | --------------- | ---------------- | -------------------------------------------- |
+| RTSP     | Low     | No                | Low             | Medium           | Security systems, low-latency monitoring     |
+| MJPEG    | Medium  | Yes               | High            | Low              | Simple web integration, quality requirements |
+| HLS/DASH | High    | Yes               | Low             | High             | Public broadcasts, mobile viewers            |
+| USB      | Lowest  | N/A               | N/A             | Low              | Local monitoring, development testing        |
+
+### Handling Multiple Camera Protocols
+
+Our system can be extended to support multiple protocols with a unified interface:
+
+```python
+def create_camera_capture(source, protocol=None):
+    """
+    Create a camera capture using the appropriate protocol
+
+    Args:
+        source: Camera source (URL, device index, etc.)
+        protocol: Protocol to use ('rtsp', 'mjpeg', 'http', 'usb')
+                  If None, will try to detect from source
+
+    Returns:
+        cv2.VideoCapture object
+    """
+    # Auto-detect protocol if not specified
+    if protocol is None:
+        if isinstance(source, int):
+            protocol = 'usb'
+        elif source.startswith('rtsp://'):
+            protocol = 'rtsp'
+        elif '.mjpg' in source or '.mjpeg' in source:
+            protocol = 'mjpeg'
+        elif '.m3u8' in source:
+            protocol = 'hls'
+        else:
+            protocol = 'http'
+
+    # Create capture based on protocol
+    if protocol == 'rtsp':
+        stream = cv2.VideoCapture(source)
+        stream.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        stream.set(cv2.CAP_PROP_RTSP_TRANSPORT, 'tcp')
+    elif protocol == 'usb':
+        stream = cv2.VideoCapture(int(source) if isinstance(source, str) else source)
+    else:  # mjpeg, http, hls
+        stream = cv2.VideoCapture(source)
+
+    return stream
+```
+
 ## People Detection with YOLOv8
 
 ### YOLOv8 Overview
