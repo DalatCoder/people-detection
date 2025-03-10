@@ -41,13 +41,30 @@ def find_working_rtsp_url():
 
 def create_camera_capture():
     """Create and return a camera capture object."""
-    # Find a working URL
-    rtsp_url = find_working_rtsp_url()
-    print(f"Connecting to camera at {rtsp_url}")
-    
-    # Use threaded RTSP stream for better performance
-    stream = RTSPVideoStream(rtsp_url).start()
-    return stream
+    # Check if webcam should be used instead of IP camera
+    if CAMERA_CONFIG.get('use_webcam', False):
+        webcam_id = CAMERA_CONFIG.get('webcam_id', 0)
+        print(f"Using laptop webcam (device ID: {webcam_id})")
+        
+        # Create a simple OpenCV capture for the webcam
+        stream = cv2.VideoCapture(webcam_id)
+        
+        # Configure webcam properties if needed
+        stream.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        stream.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        
+        if not stream.isOpened():
+            raise ConnectionError(f"Could not open webcam with ID {webcam_id}")
+            
+        return stream
+    else:
+        # Use IP camera with RTSP as before
+        rtsp_url = find_working_rtsp_url()
+        print(f"Connecting to IP camera at {rtsp_url}")
+        
+        # Use threaded RTSP stream for better performance
+        stream = RTSPVideoStream(rtsp_url).start()
+        return stream
 
 def release_camera(cap):
     """Safely release the camera resource."""

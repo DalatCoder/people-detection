@@ -10,14 +10,14 @@ A computer vision system that uses YOLOv8 to detect and count people in real-tim
 - 📊 Live statistics (current count, maximum count, FPS)
 - 📱 Web interface for remote monitoring
 - 🖥️ GPU acceleration with automatic fallback to CPU
-- 📷 Optimized camera stream handling
+- 📷 Support for both IP cameras (RTSP) and laptop webcams
 - 📈 Performance monitoring and statistics
 
 ## Requirements
 
 - Python 3.7+
 - CUDA-compatible GPU (optional, for faster inference)
-- Camera with RTSP stream or webcam
+- Camera with RTSP stream or built-in webcam
 
 ## Installation
 
@@ -39,6 +39,29 @@ A computer vision system that uses YOLOv8 to detect and count people in real-tim
 4. Download YOLOv8 model (if not included) and update path in `config.py`
 
 ## Usage
+
+### Camera Configuration
+
+You can configure the system to use either an IP camera or your laptop's webcam:
+
+#### Using Laptop Webcam (for testing/development)
+
+1. Open `config.py` and set the webcam options:
+
+   ```python
+   CAMERA_CONFIG = {
+       # ...other settings...
+       'use_webcam': True,   # Set to True to use laptop's webcam
+       'webcam_id': 0        # 0 for default camera, 1+ for external cameras
+   }
+   ```
+
+2. Run the application as normal - it will automatically use your webcam instead of trying to connect to an IP camera.
+
+#### Using IP Camera
+
+1. Ensure `use_webcam` is set to `False` in `config.py`
+2. Configure your RTSP URL and credentials in `config.py` or through environment variables
 
 ### Standalone Application
 

@@ -103,47 +103,75 @@ This document provides detailed technical information about the People Counter s
 
 The system supports multiple camera connection types:
 
-1. **Local Webcams**: Connected directly to the system.
+1. **Local Webcams**: Connected directly to the system via USB or built-in.
 2. **IP Cameras**: Connected over the network using RTSP streams.
 3. **Video Files**: For testing with recorded footage.
 
-### Implementation in `camera_utils.py`
+### Webcam Configuration
 
-The camera handling is abstracted in the `camera_utils.py` file, providing functions for:
+The system can use any webcam connected to your computer (built-in or external USB):
 
-- **Creating camera connections**: Establishing and configuring stream parameters
-- **Handling disconnections**: Automatic retry mechanisms
-- **Releasing resources**: Proper cleanup when shutting down
+1. **Enabling Webcam Mode**:
 
-#### How Real-time Data is Handled
-
-1. **Stream Initialization**:
+   In `config.py`, set the following options:
 
    ```python
-   def create_camera_capture():
-       # Example for RTSP stream with optimization
-       stream = cv2.VideoCapture(CAMERA_URL)
-
-       # Configure buffer size to reduce latency
-       stream.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-
-       # Set resolution (optional)
-       stream.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-       stream.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-
-       return stream
+   CAMERA_CONFIG = {
+       # ...other settings...
+       'use_webcam': True,   # Enable webcam instead of IP camera
+       'webcam_id': 0        # Device ID for webcam selection
+   }
    ```
 
-2. **Frame Reading Process**:
+   - `webcam_id`: This corresponds to the camera device ID:
+     - `0`: Usually the default/built-in webcam
+     - `1`, `2`, etc.: Additional USB webcams in order of connection
 
-   - The system continuously reads frames in a separate thread
-   - This non-blocking approach prevents the UI from freezing
-   - Includes timeout handling for unresponsive cameras
+2. **Webcam Properties**:
 
-3. **Error Handling**:
-   - Automatic reconnection attempts when frames cannot be read
-   - Logging of connection issues
-   - Graceful degradation when camera feed is temporarily unavailable
+   The system automatically configures the webcam with these settings:
+
+   ```python
+   stream.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+   stream.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+   ```
+
+   You can adjust these values in `camera_utils.py` if needed.
+
+3. **When to Use Webcam Mode**:
+
+   - During development and testing
+   - For demos and presentations
+   - For portable usage without network cameras
+   - For privacy-sensitive applications where network exposure is a concern
+
+### Implementation in `camera_utils.py`
+
+The camera handling now includes special logic for webcams:
+
+```python
+def create_camera_capture():
+    """Create and return a camera capture object."""
+    # Check if webcam should be used instead of IP camera
+    if CAMERA_CONFIG.get('use_webcam', False):
+        webcam_id = CAMERA_CONFIG.get('webcam_id', 0)
+        print(f"Using laptop webcam (device ID: {webcam_id})")
+
+        # Create a simple OpenCV capture for the webcam
+        stream = cv2.VideoCapture(webcam_id)
+
+        # Configure webcam properties if needed
+        stream.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        stream.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+
+        if not stream.isOpened():
+            raise ConnectionError(f"Could not open webcam with ID {webcam_id}")
+
+        return stream
+    else:
+        # Use IP camera with RTSP as before
+        # ...existing code for IP camera connection...
+```
 
 ### Best Practices for Camera Integration
 
@@ -919,3 +947,30 @@ python app.py --confidence 0.4
 # Change web port
 python app.py --port 9000
 ```
+
+### Switching Between IP Camera and Webcam
+
+You can dynamically switch between webcam and IP camera without code changes:
+
+1. **Using Environment Variables**:
+
+   ```bash
+   # Enable webcam
+   export USE_WEBCAM=1
+   export WEBCAM_ID=0
+   python app.py
+
+   # Switch back to IP camera
+   export USE_WEBCAM=0
+   python app.py
+   ```
+
+2. **Using Command Line Arguments** (requires implementation):
+
+   ```bash
+   # Use webcam
+   python app.py --webcam 0
+
+   # Use IP camera
+   python app.py --ip-camera
+   ```
