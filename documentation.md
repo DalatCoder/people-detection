@@ -572,6 +572,298 @@ The client component is a web interface that:
    - Configure Nginx as a reverse proxy
    - Implement proper authentication for secure access
 
+### Video Streaming Mechanisms
+
+The system uses several techniques to stream video from the server to web clients. Each approach has different characteristics regarding latency, browser compatibility, and implementation complexity.
+
+#### Multipart HTTP Response (MJPEG)
+
+This is the primary streaming method implemented in our system:
+
+1. **Overview**:
+
+   - Uses the `multipart/x-mixed-replace` MIME type
+   - Delivers a sequence of JPEG images over a single HTTP connection
+   - Native browser support without additional libraries
+
+2. **Implementation in Flask**:
+
+   ```python
+   @app.route('/video_feed')
+   def video_feed():
+       return Response(generate_frames(),
+                      mimetype='multipart/x-mixed-replace; boundary=frame')
+
+   def generate_frames():
+       while True:
+           frame = detector.get_latest_frame()
+           if frame is not None:
+               yield (b'--frame\r\n'
+                     b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+           else:
+               time.sleep(0.01)
+   ```
+
+3. **Client-side Usage**:
+
+   ```html
+   <img src="/video_feed" alt="Video stream" />
+   ```
+
+4. **Advantages**:
+
+   - Simple implementation
+   - Works in most browsers without additional libraries
+   - No client-side processing required
+   - Passes through most proxies and firewalls
+
+5. **Disadvantages**:
+   - Higher latency (typically 200-500ms)
+   - No built-in audio support
+   - Higher bandwidth usage than modern codecs
+   - Limited to JPEG compression
+
+#### WebRTC
+
+Web Real-Time Communication provides low-latency streaming with audio capabilities:
+
+1. **Overview**:
+
+   - Peer-to-peer communication protocol
+   - Designed for real-time audio/video communication
+   - Supports modern video codecs (H.264, VP8, VP9)
+
+2. **Implementation Example** (requires additional libraries):
+
+   ```python
+   # Server-side (using aiortc library)
+   from aiortc import RTCPeerConnection, VideoStreamTrack
+
+   class CameraVideoTrack(VideoStreamTrack):
+       def __init__(self, detector):
+           super().__init__()
+           self.detector = detector
+
+       async def recv(self):
+           frame = await self.detector.get_latest_frame_async()
+           # Convert to VideoFrame format
+           # Return formatted frame
+
+   @app.route('/webrtc/offer', methods=['POST'])
+   async def webrtc_offer():
+       params = await request.json()
+       offer = RTCSessionDescription(
+           sdp=params["sdp"], type=params["type"]
+       )
+       pc = RTCPeerConnection()
+       pc.addTrack(CameraVideoTrack(detector))
+
+       await pc.setRemoteDescription(offer)
+       answer = await pc.createAnswer()
+       await pc.setLocalDescription(answer)
+
+       return {"sdp": pc.localDescription.sdp, "type": pc.localDescription.type}
+   ```
+
+3. **Client-side Usage**:
+
+   ```javascript
+   // Create peer connection
+   const pc = new RTCPeerConnection();
+
+   // Set up video element
+   const videoEl = document.getElementById("video");
+   pc.ontrack = (event) => {
+     if (event.track.kind === "video") {
+       videoEl.srcObject = event.streams[0];
+     }
+   };
+
+   // Create and send offer
+   pc.createOffer()
+     .then((offer) => pc.setLocalDescription(offer))
+     .then(() => {
+       return fetch("/webrtc/offer", {
+         method: "POST",
+         headers: { "Content-Type": "application/json" },
+         body: JSON.stringify({
+           sdp: pc.localDescription.sdp,
+           type: pc.localDescription.type,
+         }),
+       });
+     })
+     .then((response) => response.json())
+     .then((answer) => pc.setRemoteDescription(answer));
+   ```
+
+4. **Advantages**:
+
+   - Very low latency (50-100ms)
+   - Better video quality at lower bitrates
+   - Support for audio streaming
+   - Adaptive bitrate based on network conditions
+   - Peer-to-peer connection reduces server load
+
+5. **Disadvantages**:
+   - Complex implementation
+   - May require TURN/STUN servers for NAT traversal
+   - Higher client resource usage
+   - Potential firewall issues
+
+#### WebSockets
+
+WebSockets provide a persistent connection for streaming binary or text data:
+
+1. **Overview**:
+
+   - Full-duplex communication channel over a single TCP connection
+   - Allows streaming of arbitrary binary data
+   - Can be used to implement custom streaming protocols
+
+2. **Implementation Example** (using Flask-SocketIO):
+
+   ```python
+   # Server-side
+   from flask_socketio import SocketIO
+
+   socketio = SocketIO(app)
+
+   def send_frames():
+       while True:
+           frame = detector.get_latest_frame()
+           if frame is not None:
+               socketio.emit('video_frame', {'frame': frame.decode('latin1')})
+           socketio.sleep(0.033)  # ~30 FPS
+
+   @socketio.on('connect')
+   def handle_connect():
+       socketio.start_background_task(send_frames)
+   ```
+
+3. **Client-side Usage**:
+
+   ```javascript
+   const socket = io();
+   const canvas = document.getElementById("videoCanvas");
+   const ctx = canvas.getContext("2d");
+
+   socket.on("video_frame", (data) => {
+     // Convert binary data to image
+     const img = new Image();
+     img.onload = () => {
+       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+     };
+     img.src = "data:image/jpeg;base64," + btoa(data.frame);
+   });
+   ```
+
+4. **Advantages**:
+
+   - Bidirectional communication
+   - Lower latency than HTTP streaming
+   - Can transmit additional data alongside video (e.g., metadata)
+   - Works well with custom processing pipelines
+
+5. **Disadvantages**:
+   - More complex than HTTP streaming
+   - Requires client-side processing
+   - May have issues with certain proxies
+   - Scales less efficiently for many simultaneous viewers
+
+#### Server-Sent Events (SSE)
+
+A simpler alternative to WebSockets for server-to-client streaming:
+
+1. **Overview**:
+
+   - One-way communication from server to client
+   - Uses standard HTTP connections
+   - Automatic reconnection and event IDs
+
+2. **Implementation Example**:
+
+   ```python
+   # Server-side
+   @app.route('/video_stream')
+   def video_stream():
+       def event_stream():
+           while True:
+               frame = detector.get_latest_frame()
+               if frame is not None:
+                   yield f"data: {frame.decode('latin1')}\n\n"
+               time.sleep(0.033)  # ~30 FPS
+
+       return Response(event_stream(),
+                     mimetype="text/event-stream")
+   ```
+
+3. **Client-side Usage**:
+
+   ```javascript
+   const evtSource = new EventSource("/video_stream");
+   const canvas = document.getElementById("videoCanvas");
+   const ctx = canvas.getContext("2d");
+
+   evtSource.onmessage = (event) => {
+     const img = new Image();
+     img.onload = () => {
+       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+     };
+     img.src = "data:image/jpeg;base64," + btoa(event.data);
+   };
+   ```
+
+4. **Advantages**:
+
+   - Simpler than WebSockets
+   - Built-in reconnection handling
+   - Works through most proxies and firewalls
+   - Standard browser API
+
+5. **Disadvantages**:
+   - One-way communication only
+   - Higher latency than WebSockets
+   - Limited to text-based data (requires encoding/decoding for binary)
+
+### Comparison of Streaming Methods
+
+| Method             | Latency  | Browser Support | Implementation Complexity | Bandwidth Efficiency | Two-way Comm. | Firewall Friendly |
+| ------------------ | -------- | --------------- | ------------------------- | -------------------- | ------------- | ----------------- |
+| Multipart HTTP     | Medium   | Excellent       | Low                       | Low                  | No            | Excellent         |
+| WebRTC             | Very Low | Good            | High                      | High                 | Yes           | Fair              |
+| WebSockets         | Low      | Good            | Medium                    | Medium               | Yes           | Fair              |
+| Server-Sent Events | Medium   | Good            | Low                       | Medium               | No            | Good              |
+
+### Selecting the Right Streaming Method
+
+1. **For simple deployments**:
+
+   - Use Multipart HTTP (currently implemented)
+   - Simple to deploy and debug
+   - Works in most environments without special configuration
+
+2. **For low-latency requirements**:
+
+   - Consider implementing WebRTC
+   - Requires additional server components
+   - May need TURN/STUN servers for full compatibility
+
+3. **For interactive features**:
+
+   - WebSockets provide bidirectional communication
+   - Good for adding user controls or feedback
+
+4. **For large-scale deployments**:
+
+   - Consider HLS or DASH for many simultaneous viewers
+   - Can leverage CDN infrastructure
+   - Higher latency but better scalability
+
+5. **Hybrid approaches**:
+   - Use Multipart HTTP for video display
+   - Add WebSockets for control signals and metadata
+   - Combines simplicity with interactivity
+
 ## Troubleshooting
 
 ### Common Issues and Solutions
